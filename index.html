@@ -1,0 +1,1818 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Verilog Sequential Logic Checker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  /* Layout: question list on the left, problem + editor + test results on the right (stacks on phones). */
+  --bg: #f3f4f1;
+  --panel: #ffffff;
+  --ink: #1d2433;
+  --muted: #5f6878;
+  --line: #d9ddd5;
+  --accent: #2f5bd3;
+  --accent-ink: #ffffff;
+  --code-bg: #fbfbf8;
+  --fixed-bg: #eef0ea;
+  --ok: #1d7a46;
+  --ok-bg: #e3f3e8;
+  --bad: #b3261e;
+  --bad-bg: #fbe9e7;
+  --warn: #8a5a00;
+  --warn-bg: #fdf3dc;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-code: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #14171d; --panel: #1b1f27; --ink: #e6e8ec; --muted: #9aa3b2; --line: #2d333e;
+    --accent: #7c9cff; --accent-ink: #0d1220; --code-bg: #171a21; --fixed-bg: #222731;
+    --ok: #6fd39a; --ok-bg: #173225; --bad: #ff8a80; --bad-bg: #3a1d1b; --warn: #f2c063; --warn-bg: #3a2f17;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #14171d; --panel: #1b1f27; --ink: #e6e8ec; --muted: #9aa3b2; --line: #2d333e;
+  --accent: #7c9cff; --accent-ink: #0d1220; --code-bg: #171a21; --fixed-bg: #222731;
+  --ok: #6fd39a; --ok-bg: #173225; --bad: #ff8a80; --bad-bg: #3a1d1b; --warn: #f2c063; --warn-bg: #3a2f17;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--bg); color: var(--ink); font: 15px/1.5 var(--font-body); }
+code, pre, textarea, .mono { font-family: var(--font-code); }
+code { font-size: 0.92em; background: var(--fixed-bg); padding: 1px 5px; border-radius: 4px; }
+button { font: inherit; cursor: pointer; }
+button:focus-visible, textarea:focus-visible, select:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.top { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+  padding: 14px 20px; border-bottom: 1px solid var(--line); background: var(--panel); }
+.top h1 { font-size: 18px; margin: 0; font-weight: 700; letter-spacing: -0.01em; }
+.top .sub { color: var(--muted); font-size: 13px; }
+.total { display: flex; align-items: center; gap: 14px; font-variant-numeric: tabular-nums; }
+.total .big { font-size: 22px; font-weight: 700; }
+.meter { width: 160px; height: 8px; border-radius: 99px; background: var(--fixed-bg); overflow: hidden; }
+.meter > div { height: 100%; background: var(--ok); width: 0; transition: width .3s; }
+
+.wrap { display: grid; grid-template-columns: 270px minmax(0, 1fr); min-height: calc(100% - 64px); }
+nav.list { border-right: 1px solid var(--line); background: var(--panel); padding: 10px 8px; overflow-y: auto; }
+nav.list .grp { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); margin: 12px 10px 4px; }
+nav.list button { display: grid; grid-template-columns: 26px 1fr auto; gap: 6px; align-items: center; width: 100%; text-align: left;
+  border: 0; background: transparent; color: var(--ink); padding: 7px 10px; border-radius: 7px; font-size: 14px; }
+nav.list button:hover { background: var(--fixed-bg); }
+nav.list button.active { background: var(--accent); color: var(--accent-ink); }
+nav.list .num { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 12px; }
+nav.list button.active .num { color: inherit; opacity: .8; }
+.pill { font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 99px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.pill.none { color: var(--muted); border: 1px solid var(--line); }
+.pill.part { background: var(--warn-bg); color: var(--warn); }
+.pill.full { background: var(--ok-bg); color: var(--ok); }
+.mobile-pick { display: none; }
+
+main { padding: 22px 26px 60px; min-width: 0; }
+.qhead { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+.qhead h2 { margin: 0; font-size: 22px; text-wrap: balance; }
+.tag { font-size: 12px; color: var(--muted); border: 1px solid var(--line); border-radius: 99px; padding: 1px 9px; }
+.desc { max-width: 75ch; }
+.desc p { margin: 8px 0; }
+.desc ul, .desc ol { margin: 6px 0; padding-left: 22px; }
+.desc .note { color: var(--muted); font-size: 14px; }
+table.mini { border-collapse: collapse; font-size: 14px; margin: 6px 0; }
+table.mini td, table.mini th { border: 1px solid var(--line); padding: 2px 10px; text-align: left; }
+
+.editor { margin-top: 16px; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: var(--code-bg); }
+.edbar { display: flex; justify-content: space-between; align-items: center; padding: 6px 12px; font-size: 12px; color: var(--muted);
+  border-bottom: 1px solid var(--line); background: var(--panel); }
+.codewrap { overflow-x: auto; }
+.coderow { display: grid; grid-template-columns: 46px minmax(0, 1fr); font: 14px/21px var(--font-code); min-width: 520px; }
+.gutter { text-align: right; padding: 0 10px 0 0; color: var(--muted); user-select: none; font-variant-numeric: tabular-nums; }
+.gutter span { display: block; }
+.gutter span.err { color: var(--bad); font-weight: 600; background: var(--bad-bg); }
+.fixed { background: var(--fixed-bg); }
+.fixed pre { margin: 0; padding: 0 12px; white-space: pre; color: var(--muted); }
+.fixed .gutter { padding-top: 0; }
+.fixedlabel { font: 11px/1 var(--font-body); color: var(--muted); padding: 6px 12px 4px 58px; background: var(--fixed-bg); letter-spacing: .04em; text-transform: uppercase; }
+textarea#code { display: block; width: 100%; border: 0; resize: none; background: transparent; color: var(--ink);
+  font: 14px/21px var(--font-code); padding: 0 12px; margin: 0; white-space: pre; overflow: hidden; tab-size: 4; min-height: 210px; }
+textarea#code:focus { outline: none; }
+.userarea { border-top: 2px solid var(--accent); border-bottom: 2px solid var(--accent); padding: 6px 0; }
+
+.actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; align-items: center; }
+.btn { border: 1px solid var(--line); background: var(--panel); color: var(--ink); padding: 8px 14px; border-radius: 8px; font-weight: 500; }
+.btn:hover { border-color: var(--muted); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.btn.primary:hover { filter: brightness(1.08); }
+.kbd { font-size: 12px; color: var(--muted); }
+
+.result { margin-top: 18px; }
+.scorecard { display: flex; align-items: center; gap: 16px; padding: 14px 16px; border-radius: 10px; border: 1px solid var(--line); background: var(--panel); flex-wrap: wrap; }
+.scorecard .pct { font-size: 30px; font-weight: 700; font-variant-numeric: tabular-nums; min-width: 90px; }
+.scorecard.full { border-color: var(--ok); background: var(--ok-bg); }
+.scorecard.full .pct { color: var(--ok); }
+.scorecard.part .pct { color: var(--warn); }
+.scorecard.zero .pct { color: var(--bad); }
+.msg { padding: 10px 14px; border-radius: 8px; margin-top: 10px; font-size: 14px; }
+.msg.err { background: var(--bad-bg); color: var(--bad); border: 1px solid currentColor; }
+.msg.warn { background: var(--warn-bg); color: var(--warn); }
+.msg b { font-family: var(--font-code); }
+.empty { color: var(--muted); border: 1px dashed var(--line); border-radius: 10px; padding: 16px; }
+
+.tests { margin-top: 14px; display: grid; gap: 14px; }
+.test { border: 1px solid var(--line); border-radius: 10px; background: var(--panel); overflow: hidden; }
+.test h3 { margin: 0; font-size: 14px; padding: 9px 14px; display: flex; justify-content: space-between; gap: 10px; border-bottom: 1px solid var(--line); }
+.tablewrap { overflow-x: auto; max-height: 420px; overflow-y: auto; }
+table.trace { border-collapse: collapse; width: 100%; font: 13px/1.4 var(--font-code); font-variant-numeric: tabular-nums; }
+table.trace th { position: sticky; top: 0; background: var(--panel); text-align: left; font: 600 12px var(--font-body); color: var(--muted); padding: 6px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+table.trace td { padding: 3px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+table.trace tr.bad td { background: var(--bad-bg); }
+table.trace td.badcell { color: var(--bad); font-weight: 600; }
+table.trace td.ev { font-family: var(--font-body); color: var(--muted); }
+table.trace th.grp { border-left: 1px solid var(--line); }
+table.trace td.gl { border-left: 1px solid var(--line); }
+.toggle { font-size: 13px; color: var(--muted); display: flex; gap: 6px; align-items: center; }
+
+.solution { margin-top: 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+.solution pre { margin: 0; padding: 12px 14px; font: 13.5px/1.55 var(--font-code); overflow-x: auto; }
+.solution .bar { display: flex; justify-content: space-between; align-items: center; padding: 8px 14px; border-bottom: 1px solid var(--line); font-size: 13px; color: var(--muted); }
+
+@media (max-width: 760px) {
+  .wrap { grid-template-columns: 1fr; }
+  nav.list { display: none; }
+  .mobile-pick { display: block; margin-bottom: 14px; }
+  .mobile-pick select { width: 100%; padding: 8px; font: inherit; background: var(--panel); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; }
+  main { padding: 16px; }
+  .meter { width: 100px; }
+}
+@media (prefers-reduced-motion: reduce) { .meter > div { transition: none; } }
+</style>
+</head>
+<body>
+<header class="top">
+  <div>
+    <h1>Verilog Sequential Logic Checker</h1>
+    <div class="sub">Ports are given. Write only the logic, then run it against hidden tests.</div>
+  </div>
+  <div class="total">
+    <div><div class="big" id="totalPct">0%</div><div class="sub" id="totalTxt">0 of 16 fully solved</div></div>
+    <div class="meter" aria-hidden="true"><div id="totalBar"></div></div>
+    <button class="btn" id="resetAll" type="button">Reset scores</button>
+  </div>
+</header>
+<div class="wrap">
+  <nav class="list" id="qlist" aria-label="Questions"></nav>
+  <main>
+    <div class="mobile-pick"><label for="qselect" class="sub">Question</label><select id="qselect"></select></div>
+    <div class="qhead"><h2 id="qtitle"></h2><span class="tag" id="qtag"></span></div>
+    <div class="desc" id="qdesc"></div>
+
+    <div class="editor">
+      <div class="edbar"><span id="fname">module.v</span><span>Tab = 4 spaces · Ctrl+Enter = run</span></div>
+      <div class="codewrap">
+        <div class="fixedlabel">Given (do not change)</div>
+        <div class="coderow fixed"><div class="gutter" id="gHead"></div><pre id="headCode"></pre></div>
+        <div class="coderow userarea"><div class="gutter" id="gUser"></div>
+          <textarea id="code" spellcheck="false" autocapitalize="off" autocomplete="off" aria-label="Your Verilog logic"></textarea></div>
+        <div class="coderow fixed"><div class="gutter" id="gTail"></div><pre>endmodule</pre></div>
+      </div>
+    </div>
+
+    <div class="actions">
+      <button class="btn primary" id="run" type="button">Run &amp; check</button>
+      <button class="btn" id="clear" type="button">Clear my code</button>
+      <button class="btn" id="showSol" type="button">Show solution</button>
+      <span class="kbd">Your code is kept in this browser.</span>
+    </div>
+    <div id="solBox"></div>
+
+    <div class="result" id="result"></div>
+  </main>
+</div>
+
+<script>
+// Mini Verilog engine: parser + 4-state-ish cycle simulator for a synthesizable subset.
+// Supports: ANSI/non-ANSI module headers, parameters, reg/wire/integer, localparam,
+// assign, always @(posedge/negedge ...), always @(*), always @(a or b), begin/end,
+// if/else, case/casez/casex, = and <=, bit/part selects, concat, replication,
+// arithmetic, bitwise, logical, reduction, relational, shift, ternary operators.
+"use strict";
+const VE = (function () {
+
+  class VError extends Error {
+    constructor(msg, line) { super(msg); this.line = line; }
+  }
+
+  const KEYWORDS = new Set(['module', 'endmodule', 'input', 'output', 'inout', 'wire', 'reg', 'integer',
+    'parameter', 'localparam', 'assign', 'always', 'initial', 'begin', 'end', 'if', 'else', 'case', 'casez',
+    'casex', 'endcase', 'default', 'posedge', 'negedge', 'or', 'for', 'while', 'repeat', 'forever',
+    'function', 'endfunction', 'task', 'endtask', 'signed', 'logic', 'generate', 'endgenerate', 'genvar',
+    'always_ff', 'always_comb']);
+
+  // ---------------------------------------------------------------- lexer
+  function lex(src) {
+    const toks = []; let i = 0, line = 1; const n = src.length;
+    const ops3 = ['===', '!==', '<<<', '>>>'];
+    const ops2 = ['<=', '>=', '==', '!=', '&&', '||', '<<', '>>', '~&', '~|', '~^', '^~', '**'];
+    while (i < n) {
+      const c = src[i];
+      if (c === '\n') { line++; i++; continue; }
+      if (/\s/.test(c)) { i++; continue; }
+      if (c === '/' && src[i + 1] === '/') { while (i < n && src[i] !== '\n') i++; continue; }
+      if (c === '/' && src[i + 1] === '*') {
+        const startLine = line; i += 2;
+        while (i < n && !(src[i] === '*' && src[i + 1] === '/')) { if (src[i] === '\n') line++; i++; }
+        if (i >= n) throw new VError('Unclosed /* comment', startLine);
+        i += 2; continue;
+      }
+      if (c === '`') { while (i < n && src[i] !== '\n') i++; continue; }
+      if (/[A-Za-z_]/.test(c)) {
+        let j = i; while (j < n && /[A-Za-z0-9_$]/.test(src[j])) j++;
+        const w = src.slice(i, j);
+        toks.push({ t: KEYWORDS.has(w) ? 'kw' : 'id', v: w, line }); i = j; continue;
+      }
+      if (c === '$') {
+        let j = i + 1; while (j < n && /[A-Za-z0-9_$]/.test(src[j])) j++;
+        toks.push({ t: 'sys', v: src.slice(i, j), line }); i = j; continue;
+      }
+      if (/[0-9]/.test(c) || (c === "'" && /[sSbBoOdDhH]/.test(src[i + 1] || ''))) {
+        let j = i, size = '';
+        while (j < n && /[0-9_]/.test(src[j])) { size += src[j]; j++; }
+        let k = j; while (k < n && (src[k] === ' ' || src[k] === '\t')) k++;
+        if (src[k] === "'" && /[sSbBoOdDhH]/.test(src[k + 1] || '')) {
+          k++; if (/[sS]/.test(src[k])) k++;
+          const base = src[k].toLowerCase(); k++;
+          while (k < n && (src[k] === ' ' || src[k] === '\t')) k++;
+          let digits = '';
+          while (k < n && /[0-9a-fA-FxXzZ_?]/.test(src[k])) { digits += src[k]; k++; }
+          digits = digits.replace(/_/g, '');
+          if (!digits) throw new VError('Bad number literal (no digits after the base)', line);
+          const text = src.slice(i, k);
+          toks.push({ t: 'num', size: size ? parseInt(size.replace(/_/g, ''), 10) : null, base, digits, text, line });
+          i = k; continue;
+        }
+        if (src[j] === '.') throw new VError('Real numbers (with a decimal point) are not allowed in synthesizable logic', line);
+        toks.push({ t: 'num', size: null, base: 'd', digits: size.replace(/_/g, ''), text: size, line });
+        i = j; continue;
+      }
+      const s3 = src.substr(i, 3), s2 = src.substr(i, 2);
+      if (ops3.includes(s3)) { toks.push({ t: 'op', v: s3, line }); i += 3; continue; }
+      if (ops2.includes(s2)) { toks.push({ t: 'op', v: s2, line }); i += 2; continue; }
+      if ('()[]{};:,.#@=+-*/%&|^~!<>?'.includes(c)) { toks.push({ t: 'op', v: c, line }); i++; continue; }
+      if (c === '"') throw new VError('Strings are only used in testbenches ($display), not in the design', line);
+      throw new VError(`Unexpected character '${c}'`, line);
+    }
+    toks.push({ t: 'eof', v: 'end of file', line });
+    return toks;
+  }
+
+  const tokStr = t => t.t === 'num' ? t.text : t.v;
+
+  // ---------------------------------------------------------------- parser
+  function parse(src) {
+    const toks = lex(src); let p = 0;
+    const peek = (o = 0) => toks[Math.min(p + o, toks.length - 1)];
+    const next = () => toks[p++];
+    const is = (v, o = 0) => { const t = peek(o); return (t.t === 'op' || t.t === 'kw') && t.v === v; };
+    const expect = (v, hint) => {
+      const t = next();
+      if (!((t.t === 'op' || t.t === 'kw') && t.v === v)) {
+        let m = `Expected '${v}' but found '${tokStr(t)}'`;
+        if (v === ';' ) m += ' (missing semicolon on the previous statement?)';
+        if (hint) m += ` ${hint}`;
+        throw new VError(m, v === ';' && t.line > toks[p - 2].line ? toks[p - 2].line : t.line);
+      }
+      return t;
+    };
+    const ident = (what) => {
+      const t = next();
+      if (t.t !== 'id') {
+        if (t.t === 'kw') throw new VError(`'${t.v}' is a Verilog keyword and cannot be used as ${what || 'a name'} here`, t.line);
+        throw new VError(`Expected ${what || 'a name'} but found '${tokStr(t)}'`, t.line);
+      }
+      return t;
+    };
+
+    // ---- expressions
+    const LEVELS = [['||'], ['&&'], ['|'], ['^', '~^', '^~'], ['&'], ['==', '!=', '===', '!=='],
+      ['<', '<=', '>', '>='], ['<<', '>>', '<<<', '>>>'], ['+', '-'], ['*', '/', '%']];
+    const UNARY = ['!', '~', '-', '+', '&', '|', '^', '~&', '~|', '~^', '^~'];
+
+    function parseExpr() { return parseTernary(); }
+    function parseTernary() {
+      const c = parseBin(0);
+      if (is('?')) {
+        const line = next().line;
+        const a = parseTernary(); expect(':', "in the ?: operator");
+        const b = parseTernary();
+        return { t: 'tern', c, a, b, line };
+      }
+      return c;
+    }
+    function parseBin(lvl) {
+      if (lvl >= LEVELS.length) return parseUnary();
+      let l = parseBin(lvl + 1);
+      while (peek().t === 'op' && LEVELS[lvl].includes(peek().v)) {
+        const t = next();
+        const r = parseBin(lvl + 1);
+        l = { t: 'bin', op: t.v, l, r, line: t.line };
+      }
+      return l;
+    }
+    function parseUnary() {
+      const t = peek();
+      if (t.t === 'op' && UNARY.includes(t.v)) { next(); return { t: 'un', op: t.v, e: parseUnary(), line: t.line }; }
+      return parsePrimary();
+    }
+    function parsePrimary() {
+      const t = next();
+      if (t.t === 'num') return { t: 'num', tok: t, line: t.line };
+      if (t.t === 'id') {
+        if (is('[')) {
+          next();
+          const a = parseExpr();
+          if (is(':')) { next(); const b = parseExpr(); expect(']'); return { t: 'part', name: t.v, msb: a, lsb: b, line: t.line }; }
+          expect(']');
+          return { t: 'bit', name: t.v, idx: a, line: t.line };
+        }
+        if (is('(')) throw new VError(`Function calls like '${t.v}(...)' are not supported here`, t.line);
+        return { t: 'id', name: t.v, line: t.line };
+      }
+      if (t.t === 'op' && t.v === '(') { const e = parseExpr(); expect(')'); return e; }
+      if (t.t === 'op' && t.v === '{') {
+        const first = parseExpr();
+        if (is('{')) {
+          next();
+          const parts = [parseExpr()];
+          while (is(',')) { next(); parts.push(parseExpr()); }
+          expect('}'); expect('}');
+          return { t: 'rep', count: first, parts, line: t.line };
+        }
+        const parts = [first];
+        while (is(',')) { next(); parts.push(parseExpr()); }
+        expect('}');
+        return { t: 'concat', parts, line: t.line };
+      }
+      if (t.t === 'sys') throw new VError(`${t.v} is a simulation (testbench) task and cannot be used in the design`, t.line);
+      if (t.t === 'eof') throw new VError('Unexpected end of code inside an expression', t.line);
+      throw new VError(`Unexpected '${tokStr(t)}' in an expression`, t.line);
+    }
+
+    // ---- statements
+    function parseLhs() {
+      const t = peek();
+      if (is('{')) {
+        next();
+        const parts = [parseLhs()];
+        while (is(',')) { next(); parts.push(parseLhs()); }
+        expect('}');
+        return { t: 'concat', parts, line: t.line };
+      }
+      const id = ident('a signal name to assign to');
+      if (is('[')) {
+        next();
+        const a = parseExpr();
+        if (is(':')) { next(); const b = parseExpr(); expect(']'); return { t: 'part', name: id.v, msb: a, lsb: b, line: id.line }; }
+        expect(']');
+        return { t: 'bit', name: id.v, idx: a, line: id.line };
+      }
+      return { t: 'id', name: id.v, line: id.line };
+    }
+
+    function parseStmt() {
+      const t = peek();
+      if (is('begin')) {
+        next();
+        if (is(':')) { next(); ident('a block label'); }
+        const stmts = [];
+        while (!is('end')) {
+          if (peek().t === 'eof' || is('endmodule')) throw new VError("'begin' without a matching 'end'", t.line);
+          stmts.push(parseStmt());
+        }
+        next();
+        return { t: 'block', stmts, line: t.line };
+      }
+      if (is('if')) {
+        next(); expect('(', "after 'if'");
+        const c = parseExpr(); expect(')', 'to close the if condition');
+        const th = parseStmt();
+        let el = null;
+        if (is('else')) { next(); el = parseStmt(); }
+        return { t: 'if', c, th, el, line: t.line };
+      }
+      if (is('case') || is('casez') || is('casex')) {
+        next(); expect('(', "after 'case'");
+        const e = parseExpr(); expect(')');
+        const items = []; let def = null;
+        while (!is('endcase')) {
+          if (peek().t === 'eof' || is('endmodule') || is('end')) throw new VError("'case' without a matching 'endcase'", t.line);
+          if (is('default')) {
+            const dl = next().line; if (is(':')) next();
+            if (def) throw new VError('A case can only have one default', dl);
+            def = parseStmt();
+          } else {
+            const vals = [parseExpr()];
+            while (is(',')) { next(); vals.push(parseExpr()); }
+            expect(':', 'after the case item value');
+            items.push({ vals, s: parseStmt() });
+          }
+        }
+        next();
+        return { t: 'case', e, items, def, line: t.line };
+      }
+      if (is(';')) { next(); return { t: 'empty', line: t.line }; }
+      if (is('#')) throw new VError("Delays like '#10' are only for testbenches; they are ignored by synthesis. Remove them from the design", t.line);
+      if (t.t === 'sys') throw new VError(`${t.v} is a testbench task and cannot be used in the design`, t.line);
+      if (is('for') || is('while') || is('repeat') || is('forever')) throw new VError(`'${t.v}' loops are not needed for these questions (and not supported by this checker)`, t.line);
+      if (is('else')) throw new VError("'else' without a matching 'if' (check for an extra ';' or a missing begin/end)", t.line);
+      if (is('end')) throw new VError("Unexpected 'end' (more 'end' than 'begin'?)", t.line);
+      if (is('endmodule')) throw new VError("Unexpected 'endmodule': a begin, case or statement is not finished", t.line);
+      if (peek().t === 'kw' && ['always', 'assign', 'reg', 'wire', 'initial'].includes(peek().v))
+        throw new VError(`Unexpected '${peek().v}' inside an always block (missing 'end'?)`, t.line);
+      const lhs = parseLhs();
+      const op = next();
+      if (!(op.t === 'op' && (op.v === '=' || op.v === '<='))) throw new VError(`Expected '=' or '<=' after '${lhsText(lhs)}' but found '${tokStr(op)}'`, op.line);
+      const rhs = parseExpr();
+      expect(';');
+      return { t: 'asg', op: op.v, lhs, rhs, line: lhs.line };
+    }
+
+    function parseRange() {
+      if (!is('[')) return null;
+      next(); const msb = parseExpr(); expect(':', 'in the bus range, like [3:0]'); const lsb = parseExpr(); expect(']');
+      return { msb, lsb };
+    }
+
+    // ---- module
+    const mod = { name: '', params: [], ports: [], decls: [], assigns: [], always: [] };
+    while (!is('module')) {
+      if (peek().t === 'eof') throw new VError("No 'module' found", 1);
+      next();
+    }
+    next();
+    mod.name = ident('the module name').v;
+    if (is('#')) {
+      next(); expect('(');
+      while (!is(')')) {
+        if (is('parameter')) next();
+        if (is('integer')) next();
+        parseRange();
+        const nm = ident('a parameter name'); expect('=');
+        mod.params.push({ name: nm.v, expr: parseExpr(), local: false, line: nm.line });
+        if (is(',')) next(); else break;
+      }
+      expect(')');
+    }
+    let cur = null;
+    if (is('(')) {
+      next();
+      while (!is(')')) {
+        if (is('input') || is('output') || is('inout')) {
+          const d = next();
+          cur = { dir: d.v, kind: 'wire', range: null, line: d.line };
+          if (is('wire')) next(); else if (is('reg')) { next(); cur.kind = 'reg'; }
+          if (is('signed')) next();
+          cur.range = parseRange();
+          const nm = ident('a port name');
+          mod.ports.push({ name: nm.v, dir: cur.dir, kind: cur.kind, range: cur.range, line: nm.line, ansi: true });
+        } else {
+          const nm = ident('a port name');
+          if (cur) mod.ports.push({ name: nm.v, dir: cur.dir, kind: cur.kind, range: cur.range, line: nm.line, ansi: true });
+          else mod.ports.push({ name: nm.v, dir: null, kind: 'wire', range: null, line: nm.line, ansi: false });
+        }
+        if (is(',')) next(); else break;
+      }
+      expect(')', 'to close the port list');
+    }
+    expect(';', 'after the module header');
+
+    while (!is('endmodule')) {
+      const t = peek();
+      if (t.t === 'eof') throw new VError("Missing 'endmodule'", t.line);
+      if (is('input') || is('output') || is('inout')) {
+        const d = next(); let kind = null;
+        if (is('wire')) { next(); kind = 'wire'; } else if (is('reg')) { next(); kind = 'reg'; }
+        if (is('signed')) next();
+        const range = parseRange();
+        do { const nm = ident('a port name'); mod.decls.push({ name: nm.v, dir: d.v, kind, range, line: nm.line }); }
+        while (is(',') && next());
+        expect(';');
+        continue;
+      }
+      if (is('reg') || is('wire') || is('integer') || is('logic')) {
+        const k = next(); let kind = k.v === 'wire' ? 'wire' : 'reg';
+        if (is('signed')) next();
+        let range = parseRange();
+        if (k.v === 'integer') range = 'int';
+        do {
+          const nm = ident('a signal name');
+          if (is('[')) throw new VError('Memory arrays are not needed for these questions (and not supported by this checker)', nm.line);
+          mod.decls.push({ name: nm.v, dir: null, kind, range, line: nm.line });
+          if (is('=')) {
+            next();
+            const rhs = parseExpr();
+            if (kind === 'wire') mod.assigns.push({ lhs: { t: 'id', name: nm.v, line: nm.line }, rhs, line: nm.line });
+            else throw new VError(`Initial values on reg declarations ('reg ${nm.v} = ...') are not synthesizable here; use a reset instead`, nm.line);
+          }
+        } while (is(',') && next());
+        expect(';');
+        continue;
+      }
+      if (is('parameter') || is('localparam')) {
+        const k = next(); parseRange();
+        do {
+          const nm = ident('a parameter name'); expect('=');
+          mod.params.push({ name: nm.v, expr: parseExpr(), local: k.v === 'localparam', line: nm.line });
+        } while (is(',') && next());
+        expect(';');
+        continue;
+      }
+      if (is('assign')) {
+        next();
+        do {
+          const lhs = parseLhs(); expect('=', "in the assign statement (assign uses '=', never '<=')");
+          mod.assigns.push({ lhs, rhs: parseExpr(), line: lhs.line });
+        } while (is(',') && next());
+        expect(';');
+        continue;
+      }
+      if (is('always') || is('always_ff') || is('always_comb')) {
+        const a = next();
+        let sens;
+        if (a.v === 'always_comb') sens = { star: true };
+        else {
+          expect('@', "after 'always' (e.g. always @(posedge clk))");
+          if (is('*')) { next(); sens = { star: true }; }
+          else {
+            expect('(');
+            if (is('*')) { next(); expect(')'); sens = { star: true }; }
+            else {
+              const items = [];
+              for (;;) {
+                let edge = null;
+                if (is('posedge') || is('negedge')) edge = next().v;
+                const nm = ident('a signal name in the sensitivity list');
+                if (is('[')) throw new VError('Use the whole signal name in the sensitivity list', nm.line);
+                items.push({ edge, name: nm.v, line: nm.line });
+                if (is('or') || is(',')) { next(); continue; }
+                break;
+              }
+              expect(')', 'to close the sensitivity list');
+              sens = { star: false, items };
+            }
+          }
+        }
+        mod.always.push({ sens, body: parseStmt(), line: a.line });
+        continue;
+      }
+      if (is('initial')) throw new VError("'initial' blocks are for testbenches only. In the design, use a reset to set starting values", t.line);
+      if (is('end')) throw new VError("Unexpected 'end' (more 'end' than 'begin'?)", t.line);
+      if (is('begin')) throw new VError("'begin' must come after an always/if/else/case item", t.line);
+      if (is('if') || is('case')) throw new VError(`'${t.v}' must be inside an always block`, t.line);
+      if (t.t === 'id' && peek(1).t === 'op' && (peek(1).v === '<=' || peek(1).v === '=' || peek(1).v === '['))
+        throw new VError(`A statement like '${t.v} ${peek(1).v} ...' must be inside an always block (or use 'assign ${t.v} = ...;')`, t.line);
+      if (t.t === 'id' && (peek(1).t === 'id' || is('#', 1))) throw new VError('Instantiating other modules is not needed for these questions (and not supported by this checker)', t.line);
+      throw new VError(`Unexpected '${tokStr(t)}'`, t.line);
+    }
+    next();
+    return mod;
+  }
+
+  function lhsText(l) {
+    if (l.t === 'id') return l.name;
+    if (l.t === 'bit') return l.name + '[..]';
+    if (l.t === 'part') return l.name + '[..:..]';
+    return '{...}';
+  }
+
+  // ---------------------------------------------------------------- values
+  // value = { v: BigInt, xm: BigInt (x-bit mask), w: Number }
+  const mask = w => (1n << BigInt(w)) - 1n;
+  const mk = (v, w, xm = 0n) => ({ v: BigInt.asUintN(w, v) & ~xm & mask(w), xm: xm & mask(w), w });
+  const X = w => ({ v: 0n, xm: mask(w), w });
+  const isX = a => a.xm !== 0n;
+  const ext = (a, w) => w <= a.w ? { v: a.v & mask(w), xm: a.xm & mask(w), w } : { v: a.v, xm: a.xm, w };
+
+  function parseNum(tok) {
+    let w = tok.size == null ? 32 : tok.size;
+    if (w === 0) throw new VError('A number cannot have size 0', tok.line);
+    const radix = { b: 2, o: 8, d: 10, h: 16 }[tok.base];
+    const bitsPer = { b: 1, o: 3, h: 4 }[tok.base];
+    let digits = tok.digits.toLowerCase();
+    if (/[xz?]/.test(digits)) {
+      if (tok.base === 'd') return X(w);
+      let v = 0n, xm = 0n;
+      for (const ch of digits) {
+        v <<= BigInt(bitsPer); xm <<= BigInt(bitsPer);
+        if ('xz?'.includes(ch)) xm |= mask(bitsPer); else v |= BigInt(parseInt(ch, radix));
+      }
+      // an unsized/ short value with leading x extends x
+      return mk(v, w, xm);
+    }
+    for (const ch of digits) if (isNaN(parseInt(ch, radix)) || parseInt(ch, radix) >= radix) throw new VError(`'${ch}' is not a valid digit in ${tok.text}`, tok.line);
+    let v = 0n;
+    for (const ch of digits) v = v * BigInt(radix) + BigInt(parseInt(ch, radix));
+    return mk(v, w);
+  }
+
+  // ---------------------------------------------------------------- elaboration
+  function elaborate(mod, overrides = {}) {
+    const params = {};
+    const warnings = [];
+    const sig = {};
+    const constEval = (e, what) => {
+      const val = evalExpr(e, 0, { params, sig: {}, vals: null, constOnly: true, what, sigNames: sig });
+      if (isX(val)) throw new VError(`${what || 'This value'} must be a known constant`, e.line);
+      return val;
+    };
+    for (const pr of mod.params) {
+      if (params[pr.name]) throw new VError(`Parameter '${pr.name}' is declared twice`, pr.line);
+      if (!pr.local && pr.name in overrides) params[pr.name] = mk(BigInt(overrides[pr.name]), 32);
+      else params[pr.name] = constEval(pr.expr, `Parameter '${pr.name}'`);
+    }
+    const rangeW = (r, line, nm) => {
+      if (!r) return { w: 1, lsb: 0 };
+      if (r === 'int') return { w: 32, lsb: 0 };
+      const msb = Number(constEval(r.msb, 'A bus range').v), lsb = Number(constEval(r.lsb, 'A bus range').v);
+      if (msb < lsb) throw new VError(`Use [msb:lsb] with msb >= lsb for '${nm}' (e.g. [3:0])`, line);
+      if (msb - lsb + 1 > 64) throw new VError(`'${nm}' is wider than 64 bits`, line);
+      return { w: msb - lsb + 1, lsb };
+    };
+    for (const pt of mod.ports) {
+      if (sig[pt.name]) throw new VError(`Port '${pt.name}' is listed twice`, pt.line);
+      sig[pt.name] = { name: pt.name, dir: pt.dir, kind: pt.kind, ...rangeW(pt.range, pt.line, pt.name), line: pt.line, port: true, ansi: pt.ansi };
+    }
+    for (const d of mod.decls) {
+      const s = sig[d.name];
+      if (params[d.name]) throw new VError(`'${d.name}' is already a parameter`, d.line);
+      if (d.dir) {
+        if (!s || s.ansi) throw new VError(s ? `'${d.name}' is already declared in the module header` : `'${d.name}' is declared as ${d.dir} but is not in the port list`, d.line);
+        s.dir = d.dir; if (d.kind) s.kind = d.kind; Object.assign(s, rangeW(d.range, d.line, d.name)); s.ansi = true;
+        continue;
+      }
+      if (s) {
+        if (s.port && !s.ansi) throw new VError(`Port '${d.name}' needs an input/output declaration first`, d.line);
+        if (s.port && d.kind === 'reg' && s.dir === 'output' && s.kind !== 'reg' && !s.regDecl) {
+          const r = rangeW(d.range, d.line, d.name);
+          if (r.w !== s.w) throw new VError(`'reg ${d.name}' width does not match its output declaration`, d.line);
+          s.kind = 'reg'; s.regDecl = true; continue;
+        }
+        if (s.port && s.kind === 'reg' && d.kind === 'reg') throw new VError(`'${d.name}' is already declared as 'output reg' in the header; do not declare it again`, d.line);
+        if (s.port && d.kind === 'wire') { warnings.push({ line: d.line, msg: `'${d.name}' is a port; 'wire ${d.name}' is redundant` }); continue; }
+        throw new VError(`'${d.name}' is declared twice (first on line ${s.line})`, d.line);
+      }
+      sig[d.name] = { name: d.name, dir: null, kind: d.kind, ...rangeW(d.range, d.line, d.name), line: d.line, port: false };
+    }
+    for (const s of Object.values(sig)) if (s.port && !s.dir) throw new VError(`Port '${s.name}' has no input/output declaration`, s.line);
+    for (const s of Object.values(sig)) if (s.dir === 'input' && s.kind === 'reg') throw new VError(`Input '${s.name}' cannot be declared as reg`, s.line);
+
+    const env = { params, sig };
+    // walk helpers
+    const checkExpr = (e) => {
+      if (!e) return;
+      switch (e.t) {
+        case 'id': case 'bit': case 'part':
+          if (!sig[e.name] && !params[e.name]) throw new VError(`'${e.name}' is not declared`, e.line);
+          if (e.t === 'bit') checkExpr(e.idx);
+          if (e.t === 'part') { constEval(e.msb, 'A part-select index'); constEval(e.lsb, 'A part-select index'); }
+          break;
+        case 'num': parseNum(e.tok); break;
+        case 'un': checkExpr(e.e); break;
+        case 'bin': checkExpr(e.l); checkExpr(e.r); break;
+        case 'tern': checkExpr(e.c); checkExpr(e.a); checkExpr(e.b); break;
+        case 'concat': case 'rep':
+          if (e.t === 'rep') constEval(e.count, 'A replication count');
+          for (const pp of e.parts) {
+            if (pp.t === 'num' && pp.tok.size == null) throw new VError(`Unsized number '${pp.tok.text}' inside { }. Give it a size, e.g. 1'b0`, pp.line);
+            checkExpr(pp);
+          }
+          break;
+      }
+    };
+    const lhsNames = (l, out) => {
+      if (l.t === 'concat') l.parts.forEach(p => lhsNames(p, out));
+      else {
+        if (params[l.name]) throw new VError(`'${l.name}' is a parameter (a constant) and cannot be assigned`, l.line);
+        if (!sig[l.name]) throw new VError(`'${l.name}' is not declared`, l.line);
+        if (l.t === 'bit') checkExpr(l.idx);
+        if (l.t === 'part') { constEval(l.msb, 'A part-select index'); constEval(l.lsb, 'A part-select index'); }
+        out.push(l);
+      }
+      return out;
+    };
+    const drivers = {};
+    const addDriver = (name, who, line) => {
+      if (drivers[name] && drivers[name].who !== who) throw new VError(`'${name}' is driven from two different places (also on line ${drivers[name].line}). Each signal must be assigned in only one always block or assign`, line);
+      drivers[name] = { who, line };
+    };
+    const procs = [];
+    mod.assigns.forEach((a, i) => {
+      for (const l of lhsNames(a.lhs, [])) {
+        const s = sig[l.name];
+        if (s.dir === 'input') throw new VError(`'${l.name}' is an input; a module cannot assign its own inputs`, a.line);
+        if (s.kind === 'reg') throw new VError(`'${l.name}' is declared as reg, so it cannot be driven by 'assign'. Either assign it inside an always block, or declare it as wire`, a.line);
+        addDriver(l.name, 'assign' + i, a.line);
+      }
+      checkExpr(a.rhs);
+      procs.push({ kind: 'assign', lhs: a.lhs, rhs: a.rhs, line: a.line });
+    });
+    mod.always.forEach((al, i) => {
+      const s = al.sens;
+      let kind;
+      if (s.star) kind = 'comb';
+      else {
+        const edges = s.items.filter(x => x.edge).length;
+        if (edges && edges !== s.items.length) {
+          const bad = s.items.find(x => !x.edge);
+          throw new VError(`Sensitivity list mixes edge and level signals: '${bad.name}' has no posedge/negedge. If one signal uses posedge/negedge, all must (e.g. always @(posedge clk or negedge ${bad.name}))`, bad.line);
+        }
+        for (const it of s.items) if (!sig[it.name]) throw new VError(`'${it.name}' in the sensitivity list is not declared`, it.line);
+        kind = edges ? 'seq' : 'level';
+      }
+      let usedBA = null, usedNBA = null;
+      const walk = (st) => {
+        if (!st) return;
+        switch (st.t) {
+          case 'block': st.stmts.forEach(walk); break;
+          case 'if': checkExpr(st.c); walk(st.th); walk(st.el); break;
+          case 'case': checkExpr(st.e); st.items.forEach(it => { it.vals.forEach(checkExpr); walk(it.s); }); walk(st.def); break;
+          case 'asg':
+            for (const l of lhsNames(st.lhs, [])) {
+              const sg = sig[l.name];
+              if (sg.dir === 'input') throw new VError(`'${l.name}' is an input; a module cannot assign its own inputs`, st.line);
+              if (sg.kind !== 'reg') throw new VError(`'${l.name}' is a wire, so it cannot be assigned inside an always block. Declare it as reg${sg.dir === 'output' ? ` (output reg ${l.name})` : ''}, or use assign`, st.line);
+              addDriver(l.name, 'always' + i, st.line);
+            }
+            checkExpr(st.rhs);
+            if (st.op === '=') usedBA = usedBA || st.line; else usedNBA = usedNBA || st.line;
+            break;
+        }
+      };
+      walk(al.body);
+      if (kind === 'seq' && usedBA) warnings.push({ line: usedBA, msg: "Blocking '=' inside a clocked always block. Use non-blocking '<=' for flip-flops" });
+      if (kind !== 'seq' && usedNBA) warnings.push({ line: usedNBA, msg: "Non-blocking '<=' inside a combinational/level always block. Use '=' there" });
+      if (kind === 'seq') for (const it of s.items) {
+        const sg = sig[it.name];
+        if (sg.w > 1) warnings.push({ line: it.line, msg: `'${it.name}' is ${sg.w} bits; edge detection uses only its bit 0` });
+      }
+      procs.push({ kind, sens: s, body: al.body, line: al.line, idx: i });
+    });
+    const outputs = Object.values(sig).filter(s => s.dir === 'output').map(s => s.name);
+    for (const o of outputs) if (!drivers[o]) warnings.push({ line: sig[o].line, msg: `Output '${o}' is never assigned` });
+    return { mod, params, sig, procs, warnings, outputs, inputs: Object.values(sig).filter(s => s.dir === 'input').map(s => s.name) };
+  }
+
+  // ---------------------------------------------------------------- evaluation
+  function evalExpr(e, cw, ctx) {
+    const { params, sig, vals } = ctx;
+    const ref = (name, line) => {
+      if (params[name]) return params[name];
+      if (ctx.constOnly) {
+        if (ctx.sigNames && ctx.sigNames[name]) throw new VError(`${ctx.what || 'This'} must be a constant, but '${name}' is a signal`, line);
+        throw new VError(`'${name}' is not declared (or not a constant here)`, line);
+      }
+      if (!sig[name]) throw new VError(`'${name}' is not declared`, line);
+      return vals[name];
+    };
+    const self = (x) => evalExpr(x, 0, ctx);
+    switch (e.t) {
+      case 'num': { const v = parseNum(e.tok); return cw > v.w ? ext(v, cw) : v; }
+      case 'id': { const v = ref(e.name, e.line); return cw > v.w ? ext(v, cw) : v; }
+      case 'bit': {
+        const base = ref(e.name, e.line);
+        const idx = self(e.idx);
+        if (isX(idx)) return ext(X(1), Math.max(1, cw));
+        const lsb = sig[e.name] ? sig[e.name].lsb : 0;
+        const pos = Number(idx.v) - lsb;
+        if (pos < 0 || pos >= base.w) return ext(X(1), Math.max(1, cw));
+        const r = { v: (base.v >> BigInt(pos)) & 1n, xm: (base.xm >> BigInt(pos)) & 1n, w: 1 };
+        return cw > 1 ? ext(r, cw) : r;
+      }
+      case 'part': {
+        const base = ref(e.name, e.line);
+        const msb = Number(evalExpr(e.msb, 0, { ...ctx, constOnly: true, sigNames: sig, what: 'A part-select index' }).v);
+        const lsbI = Number(evalExpr(e.lsb, 0, { ...ctx, constOnly: true, sigNames: sig, what: 'A part-select index' }).v);
+        const lsb = sig[e.name] ? sig[e.name].lsb : 0;
+        if (msb < lsbI) throw new VError(`Part select ${e.name}[${msb}:${lsbI}] is reversed; write it as [msb:lsb]`, e.line);
+        const w = msb - lsbI + 1, off = lsbI - lsb;
+        if (off < 0 || msb - lsb >= base.w) throw new VError(`Part select ${e.name}[${msb}:${lsbI}] is outside the declared range of '${e.name}'`, e.line);
+        const r = { v: (base.v >> BigInt(off)) & mask(w), xm: (base.xm >> BigInt(off)) & mask(w), w };
+        return cw > w ? ext(r, cw) : r;
+      }
+      case 'concat': case 'rep': {
+        let parts = e.parts.map(self);
+        let count = 1;
+        if (e.t === 'rep') {
+          count = Number(evalExpr(e.count, 0, { ...ctx, constOnly: true, sigNames: sig, what: 'A replication count' }).v);
+          if (count < 1 || count > 64) throw new VError('Replication count must be between 1 and 64', e.line);
+        }
+        let v = 0n, xm = 0n, w = 0;
+        for (let c = 0; c < count; c++) for (const pv of parts) {
+          v = (v << BigInt(pv.w)) | pv.v; xm = (xm << BigInt(pv.w)) | pv.xm; w += pv.w;
+        }
+        const r = { v, xm, w };
+        return cw > w ? ext(r, cw) : r;
+      }
+      case 'un': {
+        const op = e.op;
+        if (op === '!') { const a = self(e.e); if (isX(a)) return ext(X(1), Math.max(cw, 1)); return ext(mk(a.v === 0n ? 1n : 0n, 1), Math.max(cw, 1)); }
+        if (['&', '|', '^', '~&', '~|', '~^', '^~'].includes(op)) {
+          const a = self(e.e);
+          if (isX(a)) return ext(X(1), Math.max(cw, 1));
+          let r;
+          if (op === '&' || op === '~&') r = a.v === mask(a.w) ? 1n : 0n;
+          else if (op === '|' || op === '~|') r = a.v !== 0n ? 1n : 0n;
+          else { let c = 0n, t = a.v; while (t) { c ^= t & 1n; t >>= 1n; } r = c; }
+          if (op[0] === '~') r ^= 1n;
+          return ext(mk(r, 1), Math.max(cw, 1));
+        }
+        const a = evalExpr(e.e, cw, ctx); const w = Math.max(a.w, cw);
+        if (isX(a)) return X(w);
+        if (op === '~') return mk(~a.v, w);
+        if (op === '-') return mk(-a.v, w);
+        return mk(a.v, w);
+      }
+      case 'bin': {
+        const op = e.op;
+        if (op === '&&' || op === '||') {
+          const a = self(e.l), b = self(e.r);
+          const ta = isX(a) ? null : a.v !== 0n, tb = isX(b) ? null : b.v !== 0n;
+          let r;
+          if (op === '&&') r = (ta === false || tb === false) ? false : (ta === null || tb === null ? null : true);
+          else r = (ta === true || tb === true) ? true : (ta === null || tb === null ? null : false);
+          const w = Math.max(cw, 1);
+          return r === null ? X(w) : ext(mk(r ? 1n : 0n, 1), w);
+        }
+        if (['==', '!=', '===', '!==', '<', '<=', '>', '>='].includes(op)) {
+          const sa = self(e.l), sb = self(e.r); const w = Math.max(sa.w, sb.w);
+          const a = evalExpr(e.l, w, ctx), b = evalExpr(e.r, w, ctx);
+          const W = Math.max(cw, 1);
+          let r;
+          if (op === '===' || op === '!==') { r = a.v === b.v && a.xm === b.xm; if (op === '!==') r = !r; }
+          else {
+            if (isX(a) || isX(b)) return X(W);
+            switch (op) {
+              case '==': r = a.v === b.v; break; case '!=': r = a.v !== b.v; break;
+              case '<': r = a.v < b.v; break; case '<=': r = a.v <= b.v; break;
+              case '>': r = a.v > b.v; break; case '>=': r = a.v >= b.v; break;
+            }
+          }
+          return ext(mk(r ? 1n : 0n, 1), W);
+        }
+        if (['<<', '>>', '<<<', '>>>'].includes(op)) {
+          const a = evalExpr(e.l, cw, ctx), b = self(e.r); const w = Math.max(a.w, cw);
+          if (isX(a) || isX(b)) return X(w);
+          const s = b.v > 128n ? 128n : b.v;
+          return (op[0] === '<') ? mk(a.v << s, w) : mk(a.v >> s, w);
+        }
+        const a = evalExpr(e.l, cw, ctx), b = evalExpr(e.r, cw, ctx);
+        const w = Math.max(a.w, b.w, cw);
+        if (['&', '|', '^', '~^', '^~'].includes(op)) {
+          const A = ext(a, w), B = ext(b, w);
+          let v, xm;
+          if (op === '&') { // 0 & x = 0
+            const known0 = (~A.v & ~A.xm) | (~B.v & ~B.xm);
+            xm = (A.xm | B.xm) & ~known0; v = A.v & B.v;
+          } else if (op === '|') {
+            const known1 = (A.v & ~A.xm) | (B.v & ~B.xm);
+            xm = (A.xm | B.xm) & ~known1; v = A.v | B.v;
+          } else { xm = A.xm | B.xm; v = A.v ^ B.v; if (op !== '^') v = ~v; }
+          return mk(v, w, xm & mask(w));
+        }
+        if (isX(a) || isX(b)) return X(w);
+        switch (op) {
+          case '+': return mk(a.v + b.v, w);
+          case '-': return mk(a.v - b.v, w);
+          case '*': return mk(a.v * b.v, w);
+          case '/': return b.v === 0n ? X(w) : mk(a.v / b.v, w);
+          case '%': return b.v === 0n ? X(w) : mk(a.v % b.v, w);
+          case '**': return mk(a.v ** b.v, w);
+        }
+        throw new VError(`Operator '${op}' not supported`, e.line);
+      }
+      case 'tern': {
+        const c = self(e.c);
+        const a = evalExpr(e.a, cw, ctx), b = evalExpr(e.b, cw, ctx);
+        const w = Math.max(a.w, b.w, cw);
+        if (isX(c)) {
+          const A = ext(a, w), B = ext(b, w);
+          const xm = A.xm | B.xm | (A.v ^ B.v);
+          return mk(A.v, w, xm);
+        }
+        return ext((c.v !== 0n) ? a : b, w);
+      }
+    }
+    throw new VError('Unknown expression', e.line);
+  }
+
+  // ---------------------------------------------------------------- simulator
+  class RuntimeErr extends Error { }
+
+  class Sim {
+    constructor(el) {
+      this.el = el;
+      this.vals = {};
+      for (const s of Object.values(el.sig)) this.vals[s.name] = X(s.w);
+      this.comb = el.procs.filter(p => p.kind !== 'seq');
+      this.seq = el.procs.filter(p => p.kind === 'seq');
+      this.ctx = { params: el.params, sig: el.sig, vals: this.vals };
+    }
+    snap() { const o = {}; for (const k in this.vals) o[k] = this.vals[k]; return o; }
+    key(names) { return names.map(n => { const v = this.vals[n]; return v.v + ':' + v.xm; }).join('|'); }
+    // resolve an lhs into concrete targets [{name, off, w}]
+    targets(l) {
+      if (l.t === 'concat') return l.parts.flatMap(p => this.targets(p));
+      const s = this.el.sig[l.name];
+      if (l.t === 'id') return [{ name: l.name, off: 0, w: s.w }];
+      if (l.t === 'bit') {
+        const idx = evalExpr(l.idx, 0, this.ctx);
+        if (isX(idx)) return [{ name: l.name, off: -1, w: 1 }];
+        const off = Number(idx.v) - s.lsb;
+        return [{ name: l.name, off: (off < 0 || off >= s.w) ? -1 : off, w: 1 }];
+      }
+      const msb = Number(evalExpr(l.msb, 0, { ...this.ctx, constOnly: true, sigNames: this.el.sig }).v);
+      const lsb = Number(evalExpr(l.lsb, 0, { ...this.ctx, constOnly: true, sigNames: this.el.sig }).v);
+      if (msb < lsb || lsb - s.lsb < 0 || msb - s.lsb >= s.w) throw new VError(`Part select ${l.name}[${msb}:${lsb}] is outside the declared range`, l.line);
+      return [{ name: l.name, off: lsb - s.lsb, w: msb - lsb + 1 }];
+    }
+    write(tgts, val) {
+      let total = tgts.reduce((a, t) => a + t.w, 0);
+      let v = ext(val, Math.max(total, val.w));
+      v = { v: v.v & mask(total), xm: v.xm & mask(total), w: total };
+      let shift = 0;
+      for (let i = tgts.length - 1; i >= 0; i--) {
+        const t = tgts[i];
+        const piece = (v.v >> BigInt(shift)) & mask(t.w), pxm = (v.xm >> BigInt(shift)) & mask(t.w);
+        shift += t.w;
+        if (t.off < 0) continue;
+        const cur = this.vals[t.name], m = mask(t.w) << BigInt(t.off);
+        this.vals[t.name] = { v: (cur.v & ~m) | (piece << BigInt(t.off)), xm: (cur.xm & ~m) | (pxm << BigInt(t.off)), w: cur.w };
+      }
+    }
+    exec(st, nba) {
+      if (!st) return;
+      if (++this.steps > 200000) throw new RuntimeErr('Simulation took too many steps');
+      switch (st.t) {
+        case 'block': for (const s of st.stmts) this.exec(s, nba); return;
+        case 'empty': return;
+        case 'if': {
+          const c = evalExpr(st.c, 0, this.ctx);
+          if ((c.v & ~c.xm) !== 0n) this.exec(st.th, nba); else this.exec(st.el, nba);
+          return;
+        }
+        case 'case': {
+          const sv = evalExpr(st.e, 0, this.ctx);
+          for (const it of st.items) for (const ve of it.vals) {
+            const iv = evalExpr(ve, 0, this.ctx);
+            const w = Math.max(sv.w, iv.w);
+            const A = ext(sv, w), B = ext(iv, w);
+            if (A.v === B.v && A.xm === B.xm) { this.exec(it.s, nba); return; }
+          }
+          this.exec(st.def, nba);
+          return;
+        }
+        case 'asg': {
+          const tg = this.targets(st.lhs);
+          const w = tg.reduce((a, t) => a + t.w, 0);
+          const val = evalExpr(st.rhs, w, this.ctx);
+          if (st.op === '<=') nba.push([tg, val]); else this.write(tg, val);
+          return;
+        }
+      }
+    }
+    runProc(p) {
+      const nba = [];
+      this.exec(p.body, nba);
+      return nba;
+    }
+    settle() {
+      for (let it = 0; it < 300; it++) {
+        const before = this.key(Object.keys(this.vals));
+        for (const p of this.comb) {
+          if (p.kind === 'assign') {
+            const tg = this.targets(p.lhs);
+            const w = tg.reduce((a, t) => a + t.w, 0);
+            this.write(tg, evalExpr(p.rhs, w, this.ctx));
+          } else if (p.kind === 'comb') {
+            for (const [tg, v] of this.runProc(p)) this.write(tg, v);
+          } else { // level-sensitive list
+            const k = this.key(p.sens.items.map(i => i.name));
+            if (k !== p.last) { p.last = k; for (const [tg, v] of this.runProc(p)) this.write(tg, v); }
+          }
+        }
+        if (this.key(Object.keys(this.vals)) === before) return;
+      }
+      throw new RuntimeErr('The combinational logic never settles (a combinational loop, e.g. a signal that depends on itself without a clock)');
+    }
+    static edge(a, b, kind) {
+      const pa = (a.xm & 1n) ? 'x' : String(a.v & 1n), pb = (b.xm & 1n) ? 'x' : String(b.v & 1n);
+      if (kind === 'posedge') return (pa === '0' && pb !== '0') || (pa === 'x' && pb === '1');
+      return (pa === '1' && pb !== '1') || (pa === 'x' && pb === '0');
+    }
+    apply(changes) {
+      this.steps = 0;
+      let prev = this.snap();
+      for (const k in changes) {
+        const s = this.el.sig[k];
+        if (!s) continue;
+        const raw = changes[k];
+        this.vals[k] = raw === 'x' ? X(s.w) : mk(BigInt(raw), s.w);
+      }
+      for (let it = 0; it < 100; it++) {
+        this.settle();
+        const trig = this.seq.filter(p => p.sens.items.some(ev => Sim.edge(prev[ev.name], this.vals[ev.name], ev.edge)));
+        if (!trig.length) return;
+        const nba = [];
+        for (const p of trig) nba.push(...this.runProc(p));
+        prev = this.snap();
+        for (const [tg, v] of nba) this.write(tg, v);
+      }
+      throw new RuntimeErr('Clocked logic keeps re-triggering itself (a register used as its own clock?)');
+    }
+    get(name) { return this.vals[name]; }
+  }
+
+  // ---------------------------------------------------------------- grading
+  function fmtVal(v, base) {
+    if (!v) return '?';
+    if (isX(v)) {
+      if (v.w === 1) return 'x';
+      if (base === 'b') { let s = ''; for (let i = v.w - 1; i >= 0; i--) s += ((v.xm >> BigInt(i)) & 1n) ? 'x' : String((v.v >> BigInt(i)) & 1n); return s; }
+      return 'x';
+    }
+    if (base === 'b' || v.w === 1) return v.v.toString(2).padStart(v.w, '0');
+    if (base === 'h') return v.v.toString(16).toUpperCase();
+    return v.v.toString(10);
+  }
+  const same = (a, b) => a.w === b.w ? (a.v === b.v && a.xm === b.xm) : false;
+
+  function compile(src, overrides) {
+    const mod = parse(src);
+    return elaborate(mod, overrides);
+  }
+
+  // test = { name, params, init, steps:[{set, tick, label}] , clock:'clk'}
+  function grade(userSrc, refSrc, tests, opts = {}) {
+    const res = { ok: true, error: null, warnings: [], tests: [], passed: 0, total: 0 };
+    let first = true;
+    for (const test of tests) {
+      let eu, er;
+      try { eu = compile(userSrc, test.params || {}); }
+      catch (e) { if (e instanceof VError) { res.ok = false; res.error = { msg: e.message, line: e.line }; return res; } throw e; }
+      er = compile(refSrc, test.params || {});
+      if (first) { res.warnings = eu.warnings; first = false; }
+      for (const o of er.outputs) {
+        if (!eu.sig[o] || eu.sig[o].dir !== 'output') { res.ok = false; res.error = { msg: `Output '${o}' is missing from your module`, line: 1 }; return res; }
+        if (eu.sig[o].w !== er.sig[o].w) { res.ok = false; res.error = { msg: `Output '${o}' should be ${er.sig[o].w} bits wide but is ${eu.sig[o].w}`, line: eu.sig[o].line }; return res; }
+      }
+      const su = new Sim(eu), sr = new Sim(er);
+      const clk = test.clock || 'clk';
+      const rows = [];
+      const T = { name: test.name, rows, passed: 0, total: 0, runtimeError: null };
+      try {
+        su.apply(test.init); sr.apply(test.init);
+        let cyc = 0;
+        for (const st of test.steps) {
+          const set = st.set || {};
+          su.apply(set); sr.apply(set);
+          let label = st.label || '';
+          if (st.tick) { cyc++; su.apply({ [clk]: 1 }); sr.apply({ [clk]: 1 }); }
+          const inputs = {};
+          for (const i of er.inputs) if (i !== clk) inputs[i] = fmtVal(sr.get(i), opts.fmt && opts.fmt[i]);
+          const outs = er.outputs.map(o => {
+            const exp = sr.get(o), got = su.get(o);
+            return { name: o, exp: fmtVal(exp, opts.fmt && opts.fmt[o]), got: fmtVal(got, opts.fmt && opts.fmt[o]), ok: same(exp, got) };
+          });
+          const ok = outs.every(o => o.ok);
+          rows.push({ kind: st.tick ? 'clk' : 'set', cyc, label, inputs, outs, ok });
+          T.total++; if (ok) T.passed++;
+          if (st.tick) { su.apply({ [clk]: 0 }); sr.apply({ [clk]: 0 }); }
+        }
+      } catch (e) {
+        if (e instanceof RuntimeErr || e instanceof VError) { T.runtimeError = e.message; T.total = Math.max(T.total, test.steps.length); }
+        else throw e;
+      }
+      res.tests.push(T);
+      res.passed += T.passed; res.total += T.total;
+    }
+    return res;
+  }
+
+  return { lex, parse, elaborate, compile, Sim, grade, VError, fmtVal };
+})();
+
+
+</script>
+<script>
+// Questions: fixed skeleton (head) + student logic + "endmodule". Hidden tests compare
+// the student's outputs against the reference solution at every step.
+"use strict";
+const QUESTIONS = (function () {
+  function rng(seed) { let s = seed >>> 0; return () => { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; return s / 4294967296; }; }
+  const bit = (r, p = 0.5) => (r() < p ? 1 : 0);
+  const int = (r, n) => Math.floor(r() * n);
+  const tick = (set, label) => ({ tick: true, set: set || {}, label: label || '' });
+  const set = (s, label) => ({ set: s, label: label || '' });
+
+  const Q = [];
+
+  // ------------------------------------------------------------ 1
+  Q.push({
+    id: 'dff-async', title: 'D flip-flop, async reset', tag: 'Flip-flops',
+    desc: `<p>Positive-edge D flip-flop. <code>rst_n</code> is <b>active-low</b> and <b>asynchronous</b>: when it goes to 0, <code>q</code> clears to 0 immediately, without waiting for a clock edge. Otherwise <code>q</code> takes <code>d</code> on each rising edge of <code>clk</code>.</p>`,
+    head: `module dff_async (
+    input  wire clk,
+    input  wire rst_n,   // active-low, asynchronous
+    input  wire d,
+    output reg  q
+);`,
+    solution: `    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) q <= 1'b0;
+        else        q <= d;
+    end`,
+    tests() {
+      const r = rng(11), s = [];
+      s.push(set({ rst_n: 0 }, 'reset low, no clock edge'));
+      s.push(tick({ d: 1 }, 'reset held'));
+      s.push(set({ rst_n: 1 }, 'release reset'));
+      for (let i = 0; i < 10; i++) s.push(tick({ d: bit(r) }));
+      s.push(tick({ d: 1 }));
+      s.push(set({ rst_n: 0 }, 'reset mid-cycle'));
+      s.push(set({ rst_n: 1 }, 'release'));
+      for (let i = 0; i < 4; i++) s.push(tick({ d: bit(r) }));
+      return [{ name: 'Reset and random data', init: { clk: 0, rst_n: 1, d: 0 }, steps: s }];
+    }
+  });
+
+  // ------------------------------------------------------------ 2
+  Q.push({
+    id: 'dff-sync-en', title: 'D flip-flop, sync reset + enable', tag: 'Flip-flops',
+    desc: `<p>Positive-edge D flip-flop with a <b>synchronous, active-high</b> reset <code>rst</code> and an enable <code>en</code>.</p>
+<ul><li>On a rising edge: if <code>rst = 1</code>, <code>q</code> becomes 0 (reset wins over enable).</li>
+<li>Else if <code>en = 1</code>, <code>q</code> takes <code>d</code>.</li>
+<li>Otherwise <code>q</code> holds its value. Nothing changes between clock edges.</li></ul>`,
+    head: `module dff_sync_en (
+    input  wire clk,
+    input  wire rst,     // active-high, synchronous
+    input  wire en,
+    input  wire d,
+    output reg  q
+);`,
+    solution: `    always @(posedge clk) begin
+        if (rst)     q <= 1'b0;
+        else if (en) q <= d;
+    end`,
+    tests() {
+      const r = rng(22), s = [];
+      s.push(tick({ rst: 1 }, 'sync reset'));
+      s.push(set({ rst: 0, en: 1, d: 1 }));
+      for (let i = 0; i < 14; i++) s.push(tick({ rst: bit(r, 0.12), en: bit(r, 0.6), d: bit(r) }));
+      s.push(tick({ rst: 0, en: 1, d: 1 }, 'load 1'));
+      s.push(set({ rst: 1 }, 'rst=1 between edges: q must NOT change yet'));
+      s.push(tick({ rst: 1 }, 'now it resets'));
+      s.push(tick({ rst: 0, en: 0, d: 1 }, 'en=0: hold'));
+      return [{ name: 'Sync reset, enable, data', init: { clk: 0, rst: 0, en: 0, d: 0 }, steps: s }];
+    }
+  });
+
+  // ------------------------------------------------------------ 3
+  function nbitTests(seed, N) {
+    const r = rng(seed), s = [], m = 1 << N;
+    s.push(set({ rst_n: 0 }, 'async reset'));
+    s.push(set({ rst_n: 1 }));
+    for (let i = 0; i < 10; i++) s.push(tick({ d: int(r, m) }));
+    s.push(set({ rst_n: 0 }, 'reset mid-cycle'));
+    s.push(tick({ rst_n: 1, d: int(r, m) }));
+    s.push(tick({ d: m - 1 }, 'all ones'));
+    return s;
+  }
+  Q.push({
+    id: 'dff-n', title: 'Parameterized N-bit register', tag: 'Flip-flops',
+    desc: `<p>N-bit D flip-flop (register). Asynchronous active-low reset clears <b>all N bits</b>, for any value of <code>N</code>. On each rising edge, <code>q</code> takes <code>d</code>.</p>
+<p class="note">The tests also run your module with <code>N = 5</code>, so do not hard-code the width (hint: <code>{N{1'b0}}</code>).</p>`,
+    head: `module dff_n #(parameter N = 8) (
+    input  wire         clk,
+    input  wire         rst_n,
+    input  wire [N-1:0] d,
+    output reg  [N-1:0] q
+);`,
+    solution: `    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) q <= {N{1'b0}};
+        else        q <= d;
+    end`,
+    fmt: { d: 'b', q: 'b' },
+    tests() {
+      return [
+        { name: 'N = 8 (default)', init: { clk: 0, rst_n: 1, d: 0 }, steps: nbitTests(33, 8) },
+        { name: 'N = 5', params: { N: 5 }, init: { clk: 0, rst_n: 1, d: 0 }, steps: nbitTests(34, 5) }
+      ];
+    }
+  });
+
+  // ------------------------------------------------------------ 4
+  Q.push({
+    id: 'counter4', title: '4-bit up counter with enable', tag: 'Counters',
+    desc: `<p>4-bit binary up counter. Asynchronous active-low reset sets <code>count</code> to 0. On each rising edge, if <code>en = 1</code> the counter adds 1 (15 wraps to 0); if <code>en = 0</code> it holds.</p>`,
+    head: `module counter4 (
+    input  wire       clk,
+    input  wire       rst_n,
+    input  wire       en,
+    output reg  [3:0] count
+);`,
+    solution: `    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n)  count <= 4'd0;
+        else if (en) count <= count + 1'b1;
+    end`,
+    tests() {
+      const r = rng(44), s = [];
+      s.push(set({ rst_n: 0 }, 'reset')); s.push(set({ rst_n: 1, en: 1 }));
+      for (let i = 0; i < 18; i++) s.push(tick({}, i === 15 ? 'wrap 15 -> 0' : ''));
+      for (let i = 0; i < 8; i++) s.push(tick({ en: bit(r, 0.6) }));
+      s.push(set({ rst_n: 0 }, 'reset mid-cycle'));
+      s.push(tick({ rst_n: 1, en: 1 })); s.push(tick()); s.push(tick());
+      return [{ name: 'Count, hold, wrap, reset', init: { clk: 0, rst_n: 1, en: 0 }, steps: s }];
+    }
+  });
+
+  // ------------------------------------------------------------ 5
+  function udTests(seed, N) {
+    const r = rng(seed), s = [], m = 1 << N;
+    s.push(set({ rst_n: 0 }, 'reset')); s.push(set({ rst_n: 1 }));
+    s.push(tick({ up: 1 })); s.push(tick({ up: 0 }, 'down from 1'));
+    s.push(tick({ up: 0 }, 'down: 0 -> max'));
+    s.push(tick({ load: 1, din: m - 3 }, 'load'));
+    s.push(tick({ load: 0, up: 1 })); s.push(tick()); s.push(tick({}, 'up past max'));
+    for (let i = 0; i < 12; i++) s.push(tick({ load: bit(r, 0.15), up: bit(r, 0.5), din: int(r, m) }));
+    s.push(tick({ load: 1, up: 1, din: 5 }, 'load beats up'));
+    return s;
+  }
+  Q.push({
+    id: 'updown', title: 'Up/down counter with load', tag: 'Counters',
+    desc: `<p>N-bit counter. Priority on each rising edge:</p>
+<ol><li>Asynchronous active-low reset: <code>q = 0</code> (immediately).</li>
+<li><code>load = 1</code>: <code>q = din</code>.</li>
+<li><code>up = 1</code>: count up, else count down (both wrap around).</li></ol>
+<p class="note">Also tested with <code>N = 3</code>.</p>`,
+    head: `module updown_counter #(parameter N = 4) (
+    input  wire         clk,
+    input  wire         rst_n,
+    input  wire         load,
+    input  wire         up,     // 1 = up, 0 = down
+    input  wire [N-1:0] din,
+    output reg  [N-1:0] q
+);`,
+    solution: `    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n)    q <= {N{1'b0}};
+        else if (load) q <= din;
+        else if (up)   q <= q + 1'b1;
+        else           q <= q - 1'b1;
+    end`,
+    tests() {
+      const base = { clk: 0, rst_n: 1, load: 0, up: 1, din: 0 };
+      return [
+        { name: 'N = 4 (default)', init: base, steps: udTests(55, 4) },
+        { name: 'N = 3', params: { N: 3 }, init: base, steps: udTests(56, 3) }
+      ];
+    }
+  });
+
+  // ------------------------------------------------------------ 6
+  function sipoTests(seed) {
+    const r = rng(seed), s = [];
+    s.push(set({ rst_n: 0 }, 'reset')); s.push(set({ rst_n: 1 }));
+    const pat = [1, 0, 1, 1];
+    for (const b of pat) s.push(tick({ sin: b }, 'shift in ' + b));
+    for (let i = 0; i < 10; i++) s.push(tick({ sin: bit(r) }));
+    s.push(set({ rst_n: 0 }, 'reset mid-cycle')); s.push(tick({ rst_n: 1, sin: 1 }));
+    return s;
+  }
+  Q.push({
+    id: 'sipo', title: 'Shift register (serial in, parallel out)', tag: 'Shift registers',
+    desc: `<p>N-bit shift register. On each rising edge, shift <b>left</b> by one: <code>sin</code> enters at bit 0 and every bit moves up one place. <code>sout</code> is the MSB, <code>q[N-1]</code>. Asynchronous active-low reset clears <code>q</code>.</p>
+<p class="note">Example (N = 4) after shifting in 1, 0, 1, 1: q = 0001, 0010, 0101, 1011. Also tested with N = 6.</p>`,
+    head: `module shift_sipo #(parameter N = 4) (
+    input  wire         clk,
+    input  wire         rst_n,
+    input  wire         sin,
+    output wire         sout,
+    output reg  [N-1:0] q
+);`,
+    solution: `    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) q <= {N{1'b0}};
+        else        q <= {q[N-2:0], sin};
+    end
+
+    assign sout = q[N-1];`,
+    fmt: { q: 'b' },
+    tests() {
+      return [
+        { name: 'N = 4 (default)', init: { clk: 0, rst_n: 1, sin: 0 }, steps: sipoTests(66) },
+        { name: 'N = 6', params: { N: 6 }, init: { clk: 0, rst_n: 1, sin: 0 }, steps: sipoTests(67) }
+      ];
+    }
+  });
+
+  // ------------------------------------------------------------ 7
+  Q.push({
+    id: 'piso', title: 'Shift register (parallel in, serial out)', tag: 'Shift registers',
+    desc: `<p>4-bit parallel-in serial-out shift register using the internal register <code>sr</code>.</p>
+<ul><li>Asynchronous active-low reset: <code>sr = 0</code>.</li>
+<li>On a rising edge with <code>load = 1</code>: <code>sr = din</code>.</li>
+<li>On a rising edge with <code>load = 0</code>: shift <code>sr</code> left by one, filling bit 0 with 0.</li>
+<li><code>sout</code> is always the MSB of <code>sr</code> (so the data comes out MSB first).</li></ul>`,
+    head: `module piso4 (
+    input  wire       clk,
+    input  wire       rst_n,
+    input  wire       load,
+    input  wire [3:0] din,
+    output wire       sout
+);
+    reg [3:0] sr;`,
+    solution: `    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n)    sr <= 4'b0000;
+        else if (load) sr <= din;
+        else           sr <= {sr[2:0], 1'b0};
+    end
+
+    assign sout = sr[3];`,
+    fmt: { din: 'b' },
+    tests() {
+      const r = rng(77), s = [];
+      s.push(set({ rst_n: 0 }, 'reset')); s.push(set({ rst_n: 1 }));
+      s.push(tick({ load: 1, din: 0b1011 }, 'load 1011'));
+      for (let i = 0; i < 5; i++) s.push(tick({ load: 0 }, 'shift out'));
+      s.push(tick({ load: 1, din: 0b0110 }, 'load 0110'));
+      for (let i = 0; i < 4; i++) s.push(tick({ load: 0 }));
+      for (let i = 0; i < 8; i++) s.push(tick({ load: bit(r, 0.25), din: int(r, 16) }));
+      return [{ name: 'Load and shift out', init: { clk: 0, rst_n: 1, load: 0, din: 0 }, steps: s }];
+    }
+  });
+
+  // ------------------------------------------------------------ 8
+  Q.push({
+    id: 'bcd', title: 'BCD (mod-10) counter', tag: 'Counters',
+    desc: `<p>Counts 0, 1, … 9, 0, 1, … on each rising edge. Asynchronous active-low reset sets <code>q = 0</code>. <code>tc</code> (terminal count) is 1 only while <code>q</code> is 9.</p>`,
+    head: `module bcd_counter (
+    input  wire       clk,
+    input  wire       rst_n,
+    output reg  [3:0] q,
+    output wire       tc
+);`,
+    solution: `    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n)         q <= 4'd0;
+        else if (q == 4'd9) q <= 4'd0;
+        else                q <= q + 1'b1;
+    end
+
+    assign tc = (q == 4'd9);`,
+    tests() {
+      const s = [];
+      s.push(set({ rst_n: 0 }, 'reset')); s.push(set({ rst_n: 1 }));
+      for (let i = 0; i < 23; i++) s.push(tick({}, i === 9 ? '9 -> 0' : ''));
+      s.push(set({ rst_n: 0 }, 'reset mid-cycle')); s.push(tick({ rst_n: 1 })); s.push(tick());
+      return [{ name: 'Count 0-9 twice', init: { clk: 0, rst_n: 1 }, steps: s }];
+    }
+  });
+
+  // ------------------------------------------------------------ 9
+  Q.push({
+    id: 'jk', title: 'JK flip-flop', tag: 'Flip-flops',
+    desc: `<p>JK flip-flop with asynchronous active-low reset (<code>q = 0</code>). On each rising edge use a <code>case</code> on <code>{j, k}</code>:</p>
+<table class="mini"><tr><th>j k</th><th>action</th></tr><tr><td>00</td><td>hold</td></tr><tr><td>01</td><td>reset (q = 0)</td></tr><tr><td>10</td><td>set (q = 1)</td></tr><tr><td>11</td><td>toggle</td></tr></table>`,
+    head: `module jk_ff (
+    input  wire clk,
+    input  wire rst_n,
+    input  wire j,
+    input  wire k,
+    output reg  q
+);`,
+    solution: `    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) q <= 1'b0;
+        else
+            case ({j, k})
+                2'b00: q <= q;
+                2'b01: q <= 1'b0;
+                2'b10: q <= 1'b1;
+                2'b11: q <= ~q;
+            endcase
+    end`,
+    tests() {
+      const r = rng(99), s = [];
+      s.push(set({ rst_n: 0 }, 'reset')); s.push(set({ rst_n: 1 }));
+      const seq = [[1, 0], [0, 0], [1, 1], [1, 1], [0, 1], [0, 0], [1, 1]];
+      for (const [j, k] of seq) s.push(tick({ j, k }, `jk=${j}${k}`));
+      for (let i = 0; i < 12; i++) s.push(tick({ j: bit(r), k: bit(r) }));
+      return [{ name: 'All four jk cases', init: { clk: 0, rst_n: 1, j: 0, k: 0 }, steps: s }];
+    }
+  });
+
+  // ------------------------------------------------------------ 10
+  Q.push({
+    id: 'tff', title: 'T flip-flop', tag: 'Flip-flops',
+    desc: `<p>T flip-flop with asynchronous active-low reset (<code>q = 0</code>). On each rising edge, <code>q</code> toggles if <code>t = 1</code> and holds if <code>t = 0</code>.</p>`,
+    head: `module t_ff (
+    input  wire clk,
+    input  wire rst_n,
+    input  wire t,
+    output reg  q
+);`,
+    solution: `    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) q <= 1'b0;
+        else if (t) q <= ~q;
+    end`,
+    tests() {
+      const r = rng(1010), s = [];
+      s.push(set({ rst_n: 0 }, 'reset')); s.push(set({ rst_n: 1 }));
+      for (let i = 0; i < 4; i++) s.push(tick({ t: 1 }, 'toggle'));
+      for (let i = 0; i < 12; i++) s.push(tick({ t: bit(r) }));
+      return [{ name: 'Toggle and hold', init: { clk: 0, rst_n: 1, t: 0 }, steps: s }];
+    }
+  });
+
+  // ------------------------------------------------------------ 11
+  Q.push({
+    id: 'clkdiv', title: 'Clock divider (÷2 and ÷4)', tag: 'Counters',
+    desc: `<p>Generate <code>clk_div2</code> (input clock ÷ 2) and <code>clk_div4</code> (÷ 4). Asynchronous active-low reset sets both to 0.</p>
+<ul><li><code>clk_div2</code>: a register that toggles on every rising edge of <code>clk</code>.</li>
+<li><code>clk_div4</code>: the MSB of the 2-bit counter <code>cnt</code>, which adds 1 on every rising edge.</li></ul>`,
+    head: `module clk_div4 (
+    input  wire clk,
+    input  wire rst_n,
+    output reg  clk_div2,
+    output wire clk_div4
+);
+    reg [1:0] cnt;`,
+    solution: `    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) cnt <= 2'b00;
+        else        cnt <= cnt + 1'b1;
+    end
+
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) clk_div2 <= 1'b0;
+        else        clk_div2 <= ~clk_div2;
+    end
+
+    assign clk_div4 = cnt[1];`,
+    tests() {
+      const s = [];
+      s.push(set({ rst_n: 0 }, 'reset')); s.push(set({ rst_n: 1 }));
+      for (let i = 0; i < 12; i++) s.push(tick());
+      s.push(set({ rst_n: 0 }, 'reset mid-cycle')); s.push(tick({ rst_n: 1 })); s.push(tick()); s.push(tick());
+      return [{ name: '12 clock cycles', init: { clk: 0, rst_n: 1 }, steps: s }];
+    }
+  });
+
+  // ------------------------------------------------------------ 12
+  Q.push({
+    id: 'edge', title: 'Rising-edge detector', tag: 'Small circuits',
+    desc: `<p>Make <code>pulse</code> go to 1 for <b>exactly one clock cycle</b> after <code>sig</code> changes from 0 to 1. Both <code>sig_d</code> (the value of <code>sig</code> on the previous edge) and <code>pulse</code> are registers updated on the rising edge, so <code>pulse</code> is 1 right after the edge where <code>sig = 1</code> and <code>sig_d = 0</code>. Asynchronous active-low reset clears both.</p>`,
+    head: `module rise_detect (
+    input  wire clk,
+    input  wire rst_n,
+    input  wire sig,
+    output reg  pulse
+);
+    reg sig_d;   // sig, one clock ago`,
+    solution: `    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) begin
+            sig_d <= 1'b0;
+            pulse <= 1'b0;
+        end else begin
+            sig_d <= sig;
+            pulse <= sig & ~sig_d;
+        end
+    end`,
+    tests() {
+      const r = rng(1212), s = [];
+      s.push(set({ rst_n: 0 }, 'reset')); s.push(set({ rst_n: 1 }));
+      const pat = [0, 1, 1, 1, 0, 1, 0, 0, 1, 1];
+      for (const b of pat) s.push(tick({ sig: b }));
+      for (let i = 0; i < 10; i++) s.push(tick({ sig: bit(r) }));
+      return [{ name: 'Edges in sig', init: { clk: 0, rst_n: 1, sig: 0 }, steps: s }];
+    }
+  });
+
+  // ------------------------------------------------------------ 13
+  Q.push({
+    id: 'johnson', title: 'Johnson (twisted-ring) counter', tag: 'Shift registers',
+    desc: `<p>4-bit Johnson counter. Asynchronous active-low reset sets <code>q = 0000</code>. On each rising edge, shift left and feed the <b>inverted MSB</b> back into bit 0.</p>
+<p class="note">Sequence: 0000, 0001, 0011, 0111, 1111, 1110, 1100, 1000, 0000 …</p>`,
+    head: `module johnson4 (
+    input  wire       clk,
+    input  wire       rst_n,
+    output reg  [3:0] q
+);`,
+    solution: `    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) q <= 4'b0000;
+        else        q <= {q[2:0], ~q[3]};
+    end`,
+    fmt: { q: 'b' },
+    tests() {
+      const s = [];
+      s.push(set({ rst_n: 0 }, 'reset')); s.push(set({ rst_n: 1 }));
+      for (let i = 0; i < 11; i++) s.push(tick());
+      s.push(set({ rst_n: 0 }, 'reset mid-cycle')); s.push(tick({ rst_n: 1 })); s.push(tick());
+      return [{ name: 'Full cycle', init: { clk: 0, rst_n: 1 }, steps: s }];
+    }
+  });
+
+  // ------------------------------------------------------------ 14
+  Q.push({
+    id: 'modm', title: 'Parameterized mod-M counter', tag: 'Counters',
+    desc: `<p>Counts 0, 1, … M−1, then back to 0. <code>W</code> is the width of <code>q</code>. Asynchronous active-low reset sets <code>q = 0</code>. <code>tc</code> is 1 only while <code>q = M−1</code>.</p>
+<p class="note">Tested with M = 6 (default) and M = 5. Use the parameter, do not hard-code 5.</p>`,
+    head: `module mod_m_counter #(parameter M = 6, parameter W = 3) (
+    input  wire         clk,
+    input  wire         rst_n,
+    output reg  [W-1:0] q,
+    output wire         tc
+);`,
+    solution: `    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n)        q <= 0;
+        else if (q == M-1) q <= 0;
+        else               q <= q + 1'b1;
+    end
+
+    assign tc = (q == M-1);`,
+    tests() {
+      const mk = () => { const s = [set({ rst_n: 0 }, 'reset'), set({ rst_n: 1 })]; for (let i = 0; i < 14; i++) s.push(tick()); return s; };
+      return [
+        { name: 'M = 6 (default)', init: { clk: 0, rst_n: 1 }, steps: mk() },
+        { name: 'M = 5', params: { M: 5 }, init: { clk: 0, rst_n: 1 }, steps: mk() }
+      ];
+    }
+  });
+
+  // ------------------------------------------------------------ 15
+  Q.push({
+    id: 'fsm101', title: 'FSM: "101" sequence detector', tag: 'FSM',
+    desc: `<p>Moore FSM that sets <code>y = 1</code> for one cycle after the bits 1, 0, 1 arrive on <code>x</code> (one bit per clock). Overlapping is allowed: 10101 gives two detections.</p>
+<ul><li>States: <code>S0</code> nothing, <code>S1</code> seen "1", <code>S2</code> seen "10", <code>S3</code> seen "101".</li>
+<li>Write 3 parts: the state register (async active-low reset to <code>S0</code>), the next-state logic in <code>always @(*)</code>, and <code>assign y</code>.</li></ul>`,
+    head: `module seq101 (
+    input  wire clk,
+    input  wire rst_n,
+    input  wire x,
+    output wire y
+);
+    localparam S0 = 2'd0, S1 = 2'd1, S2 = 2'd2, S3 = 2'd3;
+    reg [1:0] state, next;`,
+    solution: `    // state register
+    always @(posedge clk or negedge rst_n) begin
+        if (!rst_n) state <= S0;
+        else        state <= next;
+    end
+
+    // next-state logic
+    always @(*) begin
+        next = S0;
+        case (state)
+            S0: next = x ? S1 : S0;
+            S1: next = x ? S1 : S2;
+            S2: next = x ? S3 : S0;
+            S3: next = x ? S1 : S2;
+            default: next = S0;
+        endcase
+    end
+
+    // output logic (Moore)
+    assign y = (state == S3);`,
+    tests() {
+      const r = rng(1515), s = [];
+      s.push(set({ rst_n: 0 }, 'reset')); s.push(set({ rst_n: 1 }));
+      const pat = [1, 0, 1, 0, 1, 1, 0, 1, 0, 0, 1, 1, 0, 0, 1, 0, 1];
+      for (const b of pat) s.push(tick({ x: b }, 'x=' + b));
+      for (let i = 0; i < 16; i++) s.push(tick({ x: bit(r) }));
+      return [{ name: 'Bit stream', init: { clk: 0, rst_n: 1, x: 0 }, steps: s }];
+    }
+  });
+
+  // ------------------------------------------------------------ 16
+  Q.push({
+    id: 'latch', title: 'D latch (level-sensitive)', tag: 'Latches',
+    desc: `<p>D latch: while <code>en = 1</code>, <code>q</code> follows <code>d</code>; while <code>en = 0</code>, <code>q</code> holds its last value. There is <b>no clock</b>.</p>
+<p class="note">Think: which signals go in the sensitivity list, and which branch do you leave out on purpose?</p>`,
+    head: `module d_latch (
+    input  wire en,
+    input  wire d,
+    output reg  q
+);`,
+    solution: `    always @(en or d) begin
+        if (en) q = d;
+    end`,
+    tests() {
+      const r = rng(1616), s = [];
+      const seq = [[1, 1], [1, 0], [1, 1], [0, 1], [0, 0], [0, 1], [1, 0], [0, 0], [0, 1]];
+      for (const [en, d] of seq) s.push(set({ en, d }, en ? 'transparent' : 'hold'));
+      for (let i = 0; i < 12; i++) {
+        if (r() < 0.5) s.push(set({ en: bit(r) })); else s.push(set({ d: bit(r) }));
+      }
+      return [{ name: 'Transparent and hold', clock: '__none', init: { en: 0, d: 0 }, steps: s }];
+    }
+  });
+
+  const ORDER = ['Flip-flops', 'Counters', 'Shift registers', 'Small circuits', 'FSM', 'Latches'];
+  Q.sort((a, b) => ORDER.indexOf(a.tag) - ORDER.indexOf(b.tag));
+  return Q;
+})();
+
+
+</script>
+<script>
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const store = {
+    get(k, d) { try { const v = localStorage.getItem('vchk:' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+    set(k, v) { try { localStorage.setItem('vchk:' + k, JSON.stringify(v)); } catch (e) { } }
+  };
+  const esc = (s) => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const PLACEHOLDER = '    // write your logic here\n';
+  let best = store.get('best', {});
+  let cur = 0;
+  const headLines = (q) => q.head.split('\n').length;
+
+  function pillFor(q) {
+    const b = best[q.id];
+    if (b == null) return '<span class="pill none">–</span>';
+    if (b >= 100) return '<span class="pill full">100%</span>';
+    return `<span class="pill part">${b}%</span>`;
+  }
+  function renderList() {
+    const nav = $('qlist'); let html = '', lastTag = null;
+    QUESTIONS.forEach((q, i) => {
+      if (q.tag !== lastTag) { html += `<div class="grp">${esc(q.tag)}</div>`; lastTag = q.tag; }
+      html += `<button type="button" data-i="${i}" class="${i === cur ? 'active' : ''}"><span class="num">${i + 1}</span><span>${esc(q.title)}</span>${pillFor(q)}</button>`;
+    });
+    nav.innerHTML = html;
+    $('qselect').innerHTML = QUESTIONS.map((q, i) => {
+      const b = best[q.id]; const s = b == null ? '' : ` (${b}%)`;
+      return `<option value="${i}" ${i === cur ? 'selected' : ''}>${i + 1}. ${esc(q.title)}${s}</option>`;
+    }).join('');
+    const vals = QUESTIONS.map(q => best[q.id] || 0);
+    const pct = Math.round(vals.reduce((a, b) => a + b, 0) / QUESTIONS.length);
+    const full = vals.filter(v => v >= 100).length;
+    $('totalPct').textContent = pct + '%';
+    $('totalTxt').textContent = `${full} of ${QUESTIONS.length} fully solved`;
+    $('totalBar').style.width = pct + '%';
+  }
+
+  function gutterHTML(from, count, errLine) {
+    let s = '';
+    for (let i = 0; i < count; i++) { const n = from + i; s += `<span class="${n === errLine ? 'err' : ''}">${n}</span>`; }
+    return s;
+  }
+  let errLine = null;
+  function refreshGutters() {
+    const q = QUESTIONS[cur], h = headLines(q);
+    const ta = $('code');
+    const n = ta.value.split('\n').length;
+    $('gHead').innerHTML = gutterHTML(1, h, errLine);
+    $('gUser').innerHTML = gutterHTML(h + 1, n, errLine);
+    $('gTail').innerHTML = gutterHTML(h + ta.value.split('\n').length + 1, 1, errLine);
+    ta.style.height = 'auto';
+    ta.style.height = Math.max(210, n * 21 + 2) + 'px';
+  }
+
+  function load(i) {
+    cur = i;
+    const q = QUESTIONS[i];
+    if (location.hash !== '#' + q.id) history.replaceState(null, '', '#' + q.id);
+    $('qtitle').textContent = `${i + 1}. ${q.title}`;
+    $('qtag').textContent = q.tag;
+    $('qdesc').innerHTML = q.desc;
+    $('fname').textContent = q.head.match(/module\s+(\w+)/)[1] + '.v';
+    $('headCode').textContent = q.head;
+    $('code').value = store.get('code:' + q.id, PLACEHOLDER);
+    errLine = null;
+    $('solBox').innerHTML = '';
+    $('showSol').textContent = 'Show solution';
+    const last = store.get('last:' + q.id, null);
+    $('result').innerHTML = last ? '' : `<div class="empty">Write the logic between the module header and <code>endmodule</code>, then press <b>Run &amp; check</b>. Your outputs are compared with the correct circuit on every clock edge and after every reset.</div>`;
+    refreshGutters();
+    renderList();
+    if (last) run(true);
+  }
+
+  function run(silent) {
+    const q = QUESTIONS[cur];
+    const code = $('code').value;
+    store.set('code:' + q.id, code);
+    const src = q.head + '\n' + code + '\nendmodule\n';
+    const ref = q.head + '\n' + q.solution + '\nendmodule\n';
+    let r;
+    try { r = VE.grade(src, ref, q.tests(), { fmt: q.fmt }); }
+    catch (e) { r = { ok: false, error: { msg: 'Internal checker error: ' + e.message, line: null }, tests: [], warnings: [] }; }
+    errLine = r.error ? r.error.line : null;
+    refreshGutters();
+    const h = headLines(q);
+    let html = '';
+    if (r.error) {
+      const where = r.error.line == null ? '' : (r.error.line <= h ? ` (line ${r.error.line}, in the given header)` : ` on line ${r.error.line}`);
+      html += `<div class="scorecard zero"><div class="pct">0%</div><div><b>Compile error</b>${where}<div class="sub">Fix the error and run again.</div></div></div>`;
+      html += `<div class="msg err">${esc(r.error.msg)}</div>`;
+      if (!silent) record(q, 0);
+    } else {
+      const pct = r.total ? Math.round(100 * r.passed / r.total) : 0;
+      const cls = pct === 100 ? 'full' : pct === 0 ? 'zero' : 'part';
+      const rt = r.tests.find(t => t.runtimeError);
+      html += `<div class="scorecard ${cls}"><div class="pct">${pct}%</div><div><b>${r.passed} of ${r.total} checks passed</b>
+        <div class="sub">${pct === 100 ? 'All outputs match the correct circuit. Well done.' : 'Red rows show where your outputs differ from the correct circuit.'}</div></div></div>`;
+      if (rt) html += `<div class="msg err">Simulation stopped: ${esc(rt.runtimeError)}</div>`;
+      for (const w of r.warnings) html += `<div class="msg warn">Warning (line ${w.line}): ${esc(w.msg)}</div>`;
+      html += `<label class="toggle" style="margin-top:12px"><input type="checkbox" id="onlyBad"> Show only failing rows</label>`;
+      html += '<div class="tests">';
+      for (const t of r.tests) html += testHTML(t, q);
+      html += '</div>';
+      if (!silent) record(q, pct);
+    }
+    if (!silent) store.set('last:' + q.id, true);
+    $('result').innerHTML = html;
+    const ob = $('onlyBad');
+    if (ob) ob.addEventListener('change', () => {
+      document.querySelectorAll('table.trace tr.okrow').forEach(tr => { tr.style.display = ob.checked ? 'none' : ''; });
+    });
+  }
+
+  function testHTML(t, q) {
+    if (!t.rows.length) return `<div class="test"><h3><span>${esc(t.name)}</span><span>0/${t.total}</span></h3></div>`;
+    const ins = Object.keys(t.rows[0].inputs);
+    const outs = t.rows[0].outs.map(o => o.name);
+    const hasClk = t.rows.some(r => r.kind === 'clk');
+    let h = `<div class="test"><h3><span>${esc(t.name)}</span><span class="mono">${t.passed}/${t.total}</span></h3><div class="tablewrap"><table class="trace"><thead><tr>`;
+    h += `<th>#</th><th>Event</th>`;
+    ins.forEach((n, k) => h += `<th class="${k === 0 ? 'grp' : ''}">${esc(n)}</th>`);
+    outs.forEach(n => h += `<th class="grp">${esc(n)} expected</th><th>${esc(n)} yours</th>`);
+    h += '</tr></thead><tbody>';
+    t.rows.forEach((r, i) => {
+      const ev = r.kind === 'clk' ? `↑ clk ${r.cyc}` : (hasClk ? 'between edges' : 'inputs change');
+      h += `<tr class="${r.ok ? 'okrow' : 'bad'}"><td>${i + 1}</td><td class="ev">${ev}${r.label ? ' · ' + esc(r.label) : ''}</td>`;
+      ins.forEach((n, k) => h += `<td class="${k === 0 ? 'gl' : ''}">${esc(r.inputs[n])}</td>`);
+      r.outs.forEach(o => h += `<td class="gl">${esc(o.exp)}</td><td class="${o.ok ? '' : 'badcell'}">${esc(o.got)}</td>`);
+      h += '</tr>';
+    });
+    h += '</tbody></table></div></div>';
+    return h;
+  }
+
+  function record(q, pct) {
+    if (best[q.id] == null || pct > best[q.id]) { best[q.id] = pct; store.set('best', best); }
+    renderList();
+  }
+
+  // ---- editor behaviour
+  const ta = $('code');
+  ta.addEventListener('input', () => { store.set('code:' + QUESTIONS[cur].id, ta.value); refreshGutters(); });
+  ta.addEventListener('keydown', (e) => {
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      const s = ta.selectionStart, en = ta.selectionEnd;
+      if (s === en && !e.shiftKey) { ta.setRangeText('    ', s, en, 'end'); }
+      else {
+        const v = ta.value, ls = v.lastIndexOf('\n', s - 1) + 1;
+        const block = v.slice(ls, en);
+        const nb = e.shiftKey ? block.replace(/^ {1,4}/gm, '') : block.replace(/^/gm, '    ');
+        ta.setRangeText(nb, ls, en, 'select');
+      }
+      ta.dispatchEvent(new Event('input'));
+    } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault(); run(false);
+    } else if (e.key === 'Enter') {
+      const s = ta.selectionStart, v = ta.value, ls = v.lastIndexOf('\n', s - 1) + 1;
+      let indent = (v.slice(ls).match(/^ */) || [''])[0];
+      const before = v.slice(ls, s).trim();
+      if (/\bbegin$/.test(before) || /\bcase\s*\(.*\)$/.test(before)) indent += '    ';
+      e.preventDefault();
+      ta.setRangeText('\n' + indent, s, ta.selectionEnd, 'end');
+      ta.dispatchEvent(new Event('input'));
+    }
+  });
+  $('run').addEventListener('click', () => run(false));
+  $('clear').addEventListener('click', () => { ta.value = PLACEHOLDER; ta.dispatchEvent(new Event('input')); errLine = null; refreshGutters(); ta.focus(); });
+  $('showSol').addEventListener('click', () => {
+    const box = $('solBox');
+    if (box.innerHTML) { box.innerHTML = ''; $('showSol').textContent = 'Show solution'; return; }
+    const q = QUESTIONS[cur];
+    box.innerHTML = `<div class="solution"><div class="bar"><span>One correct answer (other styles can also pass)</span><button class="btn" id="useSol" type="button">Put it in the editor</button></div><pre>${esc(q.solution)}</pre></div>`;
+    $('showSol').textContent = 'Hide solution';
+    $('useSol').addEventListener('click', () => { ta.value = q.solution + '\n'; ta.dispatchEvent(new Event('input')); });
+  });
+  $('resetAll').addEventListener('click', () => {
+    const btn = $('resetAll');
+    if (btn.dataset.armed) { best = {}; store.set('best', best); QUESTIONS.forEach(q => store.set('last:' + q.id, null)); btn.textContent = 'Reset scores'; delete btn.dataset.armed; load(cur); return; }
+    btn.dataset.armed = '1'; btn.textContent = 'Click again to reset';
+    setTimeout(() => { if (btn.dataset.armed) { delete btn.dataset.armed; btn.textContent = 'Reset scores'; } }, 3000);
+  });
+  $('qlist').addEventListener('click', (e) => { const b = e.target.closest('button[data-i]'); if (b) load(+b.dataset.i); });
+  $('qselect').addEventListener('change', (e) => load(+e.target.value));
+  window.addEventListener('hashchange', () => { const i = QUESTIONS.findIndex(q => '#' + q.id === location.hash); if (i >= 0 && i !== cur) load(i); });
+
+  const start = QUESTIONS.findIndex(q => '#' + q.id === location.hash);
+  load(start >= 0 ? start : 0);
+})();
+</script>
+</body>
+</html>
